@@ -62,6 +62,15 @@ class RegisteredUserController extends Controller
         ]);
     }
 
+
+
+
+
+
+
+
+    
+
     public function verifyOtp(Request $request)
     {
         $request->validate([
