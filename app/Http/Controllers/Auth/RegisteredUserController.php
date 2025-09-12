@@ -69,7 +69,12 @@ class RegisteredUserController extends Controller
 
 
 
+
     
+
+
+
+
 
     public function verifyOtp(Request $request)
     {
