@@ -12,11 +12,20 @@ class User extends Authenticatable
     use HasApiTokens, Notifiable, TwoFactorAuthenticatable;
 
     protected $fillable = [
-        'name','email','phone','password','user_type','status',
+        'name',
+        'email',
+        'phone',
+        'password',
+        'otp_code',
+        'otp_expires_at',
     ];
 
+
     protected $hidden = [
-        'password','remember_token','two_factor_secret','two_factor_recovery_codes',
+        'password',
+        'remember_token',
+        'two_factor_secret',
+        'two_factor_recovery_codes',
     ];
 
     protected $casts = [
