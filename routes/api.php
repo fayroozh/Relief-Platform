@@ -59,3 +59,18 @@ Route::middleware('auth:sanctum')->group(function () {
 });
 
 
+use App\Http\Controllers\CaseController;
+
+Route::get('/cases', [CaseController::class, 'index']);
+Route::post('/cases', [CaseController::class, 'store']);
+
+// مسار للأدمن لتغيير الحالة
+Route::patch('/cases/{id}/status', [CaseController::class, 'updateStatus'])
+    ->middleware('auth:sanctum'); // حماية
+
+
+use App\Http\Controllers\CategoryController;
+
+Route::middleware('auth:sanctum')->group(function () {
+    Route::apiResource('categories', CategoryController::class);
+});
