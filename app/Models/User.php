@@ -16,6 +16,8 @@ class User extends Authenticatable
         'email',
         'phone',
         'password',
+        'user_type',
+        'status',
         'otp_code',
         'otp_expires_at',
     ];
@@ -32,4 +34,10 @@ class User extends Authenticatable
         'email_verified_at' => 'datetime',
         'two_factor_confirmed_at' => 'datetime',
     ];
+
+    public function organization()
+    {
+        return $this->hasOne(\App\Models\Organization::class);
+    }
+
 }
