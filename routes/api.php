@@ -3,7 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
-
+use App\Http\Controllers\Auth\OrganizationRegistrationController;
 // مسار تجريبي للاختبار
 Route::get('/ping', function () {
     return response()->json([
@@ -30,11 +30,21 @@ Route::middleware('auth:sanctum')->group(function () {
 
 use App\Http\Controllers\OrganizationController;
 
+
+// تسجيل جمعية جديدة
+Route::post('/organizations', [OrganizationController::class, 'store']);
+
+// صلاحيات الأدمن فقط
+Route::middleware(['auth:sanctum', 'can:isAdmin'])->group(function () {
+    Route::post('/organizations/{id}/approve', [OrganizationController::class, 'approve']);
+    Route::post('/organizations/{id}/reject', [OrganizationController::class, 'reject']);
+});
+
+
 Route::get('/organizations', [OrganizationController::class, 'index']);
 Route::get('/organizations/{id}', [OrganizationController::class, 'show']);
 
 Route::middleware('auth:sanctum')->group(function () {
-    Route::post('/organizations', [OrganizationController::class, 'store']);
     Route::post('/organizations/{id}/approve', [OrganizationController::class, 'approve']);
     Route::post('/organizations/{id}/reject', [OrganizationController::class, 'reject']);
     Route::put('/organizations/{id}', [OrganizationController::class, 'update']);
@@ -52,11 +62,20 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/projects/{project}', [ProjectController::class, 'update']);
     Route::delete('/projects/{project}', [ProjectController::class, 'destroy']);
 
-    // ✅ تبرعات
-    Route::get('/donations', [DonationController::class, 'index']); // كل التبرعات
-    Route::post('/donations', [DonationController::class, 'store']); // تبرع جديد
-    Route::get('/my-donations', [DonationController::class, 'myDonations']); // تبرعات المستخدم الحالي
+   });
+
+
+
+
+Route::middleware('auth:sanctum')->group(function () {
+    Route::get('/donations', [DonationController::class, 'index']);
+    Route::get('/donations/{id}', [DonationController::class, 'show']);
+    Route::post('/donations', [DonationController::class, 'store']);
+    Route::post('/donations/{id}/receipt', [DonationController::class, 'uploadReceipt']);
+    Route::post('/donations/{id}/confirm', [DonationController::class, 'confirm']);
 });
+
+
 
 
 use App\Http\Controllers\CaseController;
@@ -74,3 +93,26 @@ use App\Http\Controllers\CategoryController;
 Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('categories', CategoryController::class);
 });
+use App\Http\Middleware\EnsureUserIsAdmin;
+use App\Http\Controllers\Admin\StatisticsController;
+
+Route::middleware(['auth:sanctum', EnsureUserIsAdmin::class])
+    ->prefix('admin')
+    ->group(function () {
+        Route::get('/statistics', [StatisticsController::class, 'index']);
+    });
+use App\Http\Controllers\Auth\ForgotPasswordController;
+
+Route::post('/password/request-reset', [ForgotPasswordController::class, 'requestReset']);
+Route::post('/password/verify-code', [ForgotPasswordController::class, 'verifyResetCode']);
+Route::post('/password/reset', [ForgotPasswordController::class, 'resetPassword']);
+
+use App\Http\Controllers\PaymentController;
+
+Route::middleware('auth:sanctum')->group(function () {
+    Route::post('payments/donate', [PaymentController::class, 'donate']);
+    Route::get('wallet/balance', [PaymentController::class, 'walletBalance']);
+});
+
+// admin confirm (protected by sanctum + admin check inside controller)
+Route::post('payments/{id}/confirm', [PaymentController::class, 'confirmPayment']);

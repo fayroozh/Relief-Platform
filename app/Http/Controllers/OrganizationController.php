@@ -6,13 +6,12 @@ use App\Models\Organization;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\Mail;
 
 class OrganizationController extends Controller
 {
     public function index(Request $request)
     {
-        // فلترة بسيطة: status, search
         $query = Organization::query();
 
         if ($status = $request->query('status')) {
@@ -32,20 +31,21 @@ class OrganizationController extends Controller
         return response()->json($result);
     }
 
-    // POST /api/organizations  (submit new org)
+    // POST /api/organizations  (submit new org) -> user can be logged-in or guest
     public function store(Request $request)
     {
         $request->validate([
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
-            'email' => 'nullable|email',
-            'phone' => 'nullable|string',
+            'email' => 'nullable|email|unique:organizations,email',
+            'phone' => 'nullable|string|unique:organizations,phone',
             'website' => 'nullable|url',
             'documents.*' => 'file|mimes:pdf,jpg,jpeg,png|max:5120' // each file max 5MB
         ]);
 
         $user = $request->user(); // can be null if guest allowed
-        // create slug unique
+
+        // create unique slug
         $slugBase = Str::slug($request->name);
         $slug = $slugBase;
         $i = 1;
@@ -97,21 +97,22 @@ class OrganizationController extends Controller
     {
         $org = Organization::findOrFail($id);
 
-        // only owner or admin can update - here check user
-        if ($request->user()->id !== $org->user_id && $request->user()->user_type !== 'admin') {
+        // only owner or admin can update
+        if (! $request->user() || ($request->user()->id !== $org->user_id && $request->user()->user_type !== 'admin')) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
         $request->validate([
             'name' => 'sometimes|required|string|max:255',
             'description' => 'nullable|string',
-            'email' => 'nullable|email',
-            'phone' => 'nullable|string',
+            'email' => 'nullable|email|unique:organizations,email,'.$org->id,
+            'phone' => 'nullable|string|unique:organizations,phone,'.$org->id,
             'website' => 'nullable|url',
             'documents.*' => 'file|mimes:pdf,jpg,jpeg,png|max:5120'
         ]);
 
         $org->fill($request->only(['name', 'description', 'email', 'phone', 'website']));
+
         // update slug if name changed
         if ($request->filled('name') && $org->isDirty('name')) {
             $slugBase = Str::slug($org->name);
@@ -122,6 +123,7 @@ class OrganizationController extends Controller
             }
             $org->slug = $slug;
         }
+
         $org->save();
 
         // append documents if any
@@ -143,12 +145,13 @@ class OrganizationController extends Controller
     }
 
     // POST /api/organizations/{id}/approve  (admin)
+    // NOTE: لا ننشئ حساب للمؤسسة هنا ولا نولد كلمة مرور — المؤسسة سجلت بياناتها وهي التي ستستعمل بياناتها عند التسجيل لاحقاً
     public function approve(Request $request, $id)
     {
         $org = Organization::findOrFail($id);
 
         // only admin
-        if ($request->user()->user_type !== 'admin') {
+        if (! $request->user() || $request->user()->user_type !== 'admin') {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -158,9 +161,18 @@ class OrganizationController extends Controller
             'admin_notes' => $request->input('admin_notes') ?? null,
         ]);
 
-        // optionally notify organization owner by email (if exists)
+        // إرسال إشعار إيميل خفيف للجهة المعلنة (إذا لديها إيميل)
         if ($org->email) {
-            \Mail::to($org->email)->send(new \App\Mail\OrganizationApproved($org));
+            $body = "تمت الموافقة على حساب جمعيتكم: {$org->name}\n\n";
+            $body .= "يمكنكم الآن تسجيل الدخول عبر صفحة تسجيل الجمعيات باستخدام البريد وكلمة المرور التي أدخلتموها عند التسجيل (أو التي قُمتُم بتعيينها لاحقاً).\n\n";
+            if ($org->admin_notes) {
+                $body .= "ملاحظات الإدارة: {$org->admin_notes}\n\n";
+            }
+            $body .= "مع تحيات فريق المنصة.";
+
+            Mail::raw($body, function ($msg) use ($org) {
+                $msg->to($org->email)->subject('تمت الموافقة على حساب جمعيتكم');
+            });
         }
 
         return response()->json(['message' => 'Organization approved', 'organization' => $org]);
@@ -171,7 +183,7 @@ class OrganizationController extends Controller
     {
         $org = Organization::findOrFail($id);
 
-        if ($request->user()->user_type !== 'admin') {
+        if (! $request->user() || $request->user()->user_type !== 'admin') {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -179,11 +191,18 @@ class OrganizationController extends Controller
 
         $org->update([
             'status' => 'rejected',
-            'admin_notes' => $request->input('reason'),
+            'admin_notes' => $request->input('reason') ?? null,
         ]);
 
         if ($org->email) {
-            \Mail::to($org->email)->send(new \App\Mail\OrganizationRejected($org));
+            $body = "نأسف لإبلاغكم أن طلب الجمعية \"{$org->name}\" قد رُفض.\n\n";
+            if ($org->admin_notes) {
+                $body .= "سبب الرفض: {$org->admin_notes}\n\n";
+            }
+            $body .= "يمكنكم تعديل الطلب وإعادة الإرسال عبر لوحة حسابكم أو التواصل مع الدعم.";
+            Mail::raw($body, function ($msg) use ($org) {
+                $msg->to($org->email)->subject('تم رفض طلب تسجيل الجمعية');
+            });
         }
 
         return response()->json(['message' => 'Organization rejected', 'organization' => $org]);
@@ -193,7 +212,7 @@ class OrganizationController extends Controller
     public function destroy(Request $request, $id)
     {
         $org = Organization::findOrFail($id);
-        if ($request->user()->id !== $org->user_id && $request->user()->user_type !== 'admin') {
+        if (! $request->user() || ($request->user()->id !== $org->user_id && $request->user()->user_type !== 'admin')) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 

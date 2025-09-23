@@ -6,18 +6,25 @@ use Illuminate\Http\Request;
 
 class CaseController extends Controller
 {
-    // عرض جميع الحالات (مع إمكانية فلترة بالحالة)
+    // GET /api/cases?status=approved&q=keyword
     public function index(Request $request)
     {
-        $status = $request->query('status');
-        $cases = CaseModel::when($status, function ($q) use ($status) {
-            return $q->where('status', $status);
-        })->with(['organization', 'category'])->get();
+        $query = CaseModel::with(['organization', 'category']);
 
-        return response()->json($cases);
+        if ($status = $request->query('status')) {
+            $query->where('status', $status);
+        }
+
+        if ($q = $request->query('q')) {
+            $query->where('title', 'like', "%$q%")
+                  ->orWhere('description', 'like', "%$q%");
+        }
+
+        $perPage = (int) $request->query('per_page', 10);
+        return response()->json($query->paginate($perPage));
     }
 
-    // إضافة حالة جديدة (مستخدم/جمعية)
+    // POST /api/cases
     public function store(Request $request)
     {
         $request->validate([
@@ -28,7 +35,15 @@ class CaseController extends Controller
             'goal_amount' => 'required|numeric|min:1',
         ]);
 
-        $case = CaseModel::create($request->all());
+        $case = CaseModel::create([
+            'organization_id' => $request->organization_id,
+            'title' => $request->title,
+            'description' => $request->description,
+            'category_id' => $request->category_id,
+            'goal_amount' => $request->goal_amount,
+            'collected_amount' => 0,
+            'status' => 'pending',
+        ]);
 
         return response()->json([
             'message' => 'Case created successfully, pending approval',
@@ -36,7 +51,7 @@ class CaseController extends Controller
         ], 201);
     }
 
-    // تحديث حالة (للأدمن)
+    // PUT /api/cases/{id}/status
     public function updateStatus(Request $request, $id)
     {
         $request->validate([
@@ -50,5 +65,20 @@ class CaseController extends Controller
             'message' => 'Case status updated',
             'case' => $case
         ]);
+    }
+
+    // ✅ دالة لتحديث المبلغ بعد التبرع (تناديها DonationController)
+    public function addDonation($caseId, $amount)
+    {
+        $case = CaseModel::findOrFail($caseId);
+
+        $case->collected_amount += $amount;
+
+        if ($case->collected_amount >= $case->goal_amount) {
+            $case->status = 'completed';
+        }
+
+        $case->save();
+        return $case;
     }
 }

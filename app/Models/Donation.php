@@ -10,19 +10,24 @@ class Donation extends Model
     use HasFactory;
 
     protected $fillable = [
+        'case_id',
         'user_id',
-        'project_id',
         'amount',
+        'method',
         'status',
+        'note',
+        'receipt_path',
     ];
 
-    public function user()
+    // علاقة مع الحالة
+    public function case()
     {
-        return $this->belongsTo(User::class);
+        return $this->belongsTo(CaseModel::class, 'case_id');
     }
 
-    public function project()
+    // علاقة مع المتبرع (المستخدم)
+    public function donor()
     {
-        return $this->belongsTo(Project::class);
+        return $this->belongsTo(User::class, 'user_id');
     }
 }

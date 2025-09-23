@@ -31,4 +31,9 @@ class Project extends Model
     {
         return $this->belongsTo(User::class, 'created_by_id')->where('created_by_type', 'admin');
     }
+    public function donations()
+    {
+        return $this->hasMany(\App\Models\Donation::class);
+    }
+
 }
