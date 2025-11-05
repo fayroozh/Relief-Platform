@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 use App\Models\CaseModel;
 use Illuminate\Http\Request;
 
+use App\Helpers\Notify;
 class CaseController extends Controller
 {
     // GET /api/cases?status=approved&q=keyword
@@ -17,7 +18,7 @@ class CaseController extends Controller
 
         if ($q = $request->query('q')) {
             $query->where('title', 'like', "%$q%")
-                  ->orWhere('description', 'like', "%$q%");
+                ->orWhere('description', 'like', "%$q%");
         }
 
         $perPage = (int) $request->query('per_page', 10);
@@ -61,6 +62,22 @@ class CaseController extends Controller
         $case = CaseModel::findOrFail($id);
         $case->update(['status' => $request->status]);
 
+
+        if ($request->status === 'approved') {
+            Notify::send(
+                $case->organization->user_id,
+                'تمت الموافقة على الحالة ✅',
+                "تمت الموافقة على الحالة: {$case->title}",
+                'case'
+            );
+        } elseif ($request->status === 'rejected') {
+            Notify::send(
+                $case->organization->user_id,
+                'تم رفض الحالة ❌',
+                "تم رفض الحالة: {$case->title}",
+                'case'
+            );
+        }
         return response()->json([
             'message' => 'Case status updated',
             'case' => $case
