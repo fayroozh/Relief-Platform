@@ -7,6 +7,9 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Mail;
+use App\Notifications\GeneralNotification;
+use Illuminate\Support\Facades\Notification;
+use App\Helpers\Notify;
 
 class OrganizationController extends Controller
 {
@@ -98,15 +101,15 @@ class OrganizationController extends Controller
         $org = Organization::findOrFail($id);
 
         // only owner or admin can update
-        if (! $request->user() || ($request->user()->id !== $org->user_id && $request->user()->user_type !== 'admin')) {
+        if (!$request->user() || ($request->user()->id !== $org->user_id && $request->user()->user_type !== 'admin')) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
         $request->validate([
             'name' => 'sometimes|required|string|max:255',
             'description' => 'nullable|string',
-            'email' => 'nullable|email|unique:organizations,email,'.$org->id,
-            'phone' => 'nullable|string|unique:organizations,phone,'.$org->id,
+            'email' => 'nullable|email|unique:organizations,email,' . $org->id,
+            'phone' => 'nullable|string|unique:organizations,phone,' . $org->id,
             'website' => 'nullable|url',
             'documents.*' => 'file|mimes:pdf,jpg,jpeg,png|max:5120'
         ]);
@@ -151,7 +154,7 @@ class OrganizationController extends Controller
         $org = Organization::findOrFail($id);
 
         // only admin
-        if (! $request->user() || $request->user()->user_type !== 'admin') {
+        if (!$request->user() || $request->user()->user_type !== 'admin') {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -174,6 +177,12 @@ class OrganizationController extends Controller
                 $msg->to($org->email)->subject('تمت الموافقة على حساب جمعيتكم');
             });
         }
+        $org->user?->notify(new GeneralNotification(
+            'تمت الموافقة على جمعيتك',
+            "تمت الموافقة على الجمعية {$org->name}. يمكنك الآن تسجيل الدخول إلى حسابك.",
+            null
+        ));
+        
 
         return response()->json(['message' => 'Organization approved', 'organization' => $org]);
     }
@@ -183,7 +192,7 @@ class OrganizationController extends Controller
     {
         $org = Organization::findOrFail($id);
 
-        if (! $request->user() || $request->user()->user_type !== 'admin') {
+        if (!$request->user() || $request->user()->user_type !== 'admin') {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -212,7 +221,7 @@ class OrganizationController extends Controller
     public function destroy(Request $request, $id)
     {
         $org = Organization::findOrFail($id);
-        if (! $request->user() || ($request->user()->id !== $org->user_id && $request->user()->user_type !== 'admin')) {
+        if (!$request->user() || ($request->user()->id !== $org->user_id && $request->user()->user_type !== 'admin')) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 

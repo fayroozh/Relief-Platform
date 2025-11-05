@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
+use App\Helpers\Notify;
 
 class DonationController extends Controller
 {
@@ -164,9 +165,18 @@ class DonationController extends Controller
             });
         }
 
-        return response()->json([
-            'message' => 'Donation confirmed and case updated',
-            'donation' => $donation,
-        ]);
+
+        // إشعار للجمعية
+        if ($donation->case->organization?->user_id) {
+            Notify::send(
+                $donation->case->organization->user_id,
+                'تبرع جديد وصل 🎁',
+                "تم تأكيد تبرع بمبلغ {$donation->amount} للحالة ({$donation->case->title}).",
+                'donation'
+            );
+        }
+
+        return response()->json(['message' => 'Donation confirmed']);
     }
+
 }

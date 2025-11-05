@@ -62,7 +62,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/projects/{project}', [ProjectController::class, 'update']);
     Route::delete('/projects/{project}', [ProjectController::class, 'destroy']);
 
-   });
+});
 
 
 
@@ -116,3 +116,37 @@ Route::middleware('auth:sanctum')->group(function () {
 
 // admin confirm (protected by sanctum + admin check inside controller)
 Route::post('payments/{id}/confirm', [PaymentController::class, 'confirmPayment']);
+
+use App\Http\Controllers\ProfileController;
+
+Route::middleware('auth:sanctum')->group(function () {
+    Route::get('/profile', [ProfileController::class, 'show']);
+    Route::post('/profile/update', [ProfileController::class, 'update']);
+    Route::post('/profile/update-password', [ProfileController::class, 'updatePassword']);
+});
+use App\Http\Controllers\MessageController;
+
+Route::middleware('auth:sanctum')->group(function () {
+    Route::get('/messages/inbox', [MessageController::class, 'inbox']);
+    Route::get('/messages/sent', [MessageController::class, 'sent']);
+    Route::post('/messages', [MessageController::class, 'store']);
+    Route::patch('/messages/{id}/read', [MessageController::class, 'markAsRead']);
+});
+
+// فقط الأدمن
+Route::middleware(['auth:sanctum', 'can:isAdmin'])->post('/messages/broadcast', [MessageController::class, 'broadcast']);
+
+use App\Http\Controllers\NotificationController;
+
+Route::middleware('auth:sanctum')->group(function () {
+    Route::get('/notifications', [NotificationController::class, 'index']);
+    Route::get('/notifications/unread', [NotificationController::class, 'unread']);
+    Route::post('/notifications/{id}/read', [NotificationController::class, 'markAsRead']);
+    Route::delete('/notifications/{id}', [NotificationController::class, 'destroy']);
+});
+
+Route::middleware(['auth:sanctum', 'can:isAdmin'])->group(function () {
+    Route::post('/notifications/broadcast', [NotificationController::class, 'broadcast']);
+});
+
+

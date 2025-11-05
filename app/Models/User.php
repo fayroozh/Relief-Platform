@@ -20,7 +20,12 @@ class User extends Authenticatable
         'status',
         'otp_code',
         'otp_expires_at',
+        'profile_image',
+        'cover_image',
+        'bio',
     ];
+
+
 
 
     protected $hidden = [

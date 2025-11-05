@@ -10,19 +10,35 @@ return new class extends Migration
     {
         Schema::create('projects', function (Blueprint $table) {
             $table->id();
+
+            // 🔹 معلومات المشروع الأساسية
             $table->string('title'); // عنوان المشروع
             $table->text('description')->nullable(); // وصف المشروع
-            $table->decimal('goal_amount', 12, 2)->default(0); // المبلغ المستهدف
-            $table->decimal('raised_amount', 12, 2)->default(0); // المبلغ المجموع
-            $table->date('deadline')->nullable(); // آخر موعد للتبرع
 
-            // لمعرفة مين أنشأ المشروع: جمعية أو إدمن
+            // 🔹 مبالغ المشروع
+            $table->decimal('goal_amount', 12, 2)->default(0); // المبلغ المستهدف
+            $table->decimal('raised_amount', 12, 2)->default(0); // المبلغ المجموع حتى الآن
+
+            // 🔹 وقت الانتهاء
+            $table->date('deadline')->nullable();
+
+            // 🔹 من أنشأ المشروع (إما أدمن أو جمعية)
             $table->unsignedBigInteger('created_by_id');
             $table->enum('created_by_type', ['admin', 'organization']);
 
-            $table->enum('status', ['active', 'inactive', 'completed'])->default('active');
+            // 🔹 حالة المشروع
+            $table->enum('status', ['pending', 'approved', 'rejected', 'completed'])->default('pending');
+
+            // 🔹 مسار صورة المشروع (اختياري)
+            $table->string('image_path')->nullable();
+
+            // 🔹 ملاحظات الأدمن عند الرفض أو المراجعة
+            $table->text('admin_notes')->nullable();
 
             $table->timestamps();
+
+            // 🔹 فهرس لتحسين البحث
+            $table->index(['created_by_id', 'created_by_type']);
         });
     }
 
