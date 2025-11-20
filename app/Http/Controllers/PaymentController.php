@@ -53,43 +53,10 @@ class PaymentController extends Controller
             'meta' => $data['meta'] ?? null,
         ]);
 
-        // If wallet -> perform immediate transfer from donor wallet
-        if ($data['method'] === 'wallet') {
-            // find donor wallet
-            $donorWallet = Wallet::firstOrCreate(['user_id' => $user->id], ['name' => $user->name . ' wallet', 'balance' => 0]);
-            DB::beginTransaction();
-            try {
-                // check balance
-                if ($donorWallet->balance < $data['amount']) {
-                    DB::rollBack();
-                    return response()->json(['message' => 'Insufficient wallet balance'], 422);
-                }
-
-                // debit donor
-                $donorWallet->debit($data['amount'], $payment->id, 'donation_debit');
-
-                // mark payment pending -> then execute
-                $payment->update(['status' => 'pending']);
-
-                // execute allocation (credits destination/system/points + award points)
-                $this->paymentService->executePayment($payment);
-
-                DB::commit();
-
-                return response()->json([
-                    'message' => 'Donation completed successfully',
-                    'payment' => $payment->fresh()
-                ]);
-            } catch (\Exception $e) {
-                DB::rollBack();
-                return response()->json(['message' => 'Error processing wallet payment', 'error' => $e->getMessage()], 500);
-            }
-        }
-
-        // For cash/shamcash/card -> leave pending, admin confirmation required (or webhook)
         return response()->json([
-            'message' => 'Donation recorded as pending. It will be marked completed after confirmation.',
-            'payment_id' => $payment->id
+            'message' => 'Donation recorded as pending. It will be marked completed after admin confirmation.',
+            'payment_id' => $payment->id,
+            'status' => 'pending'
         ], 201);
     }
 
@@ -104,17 +71,25 @@ class PaymentController extends Controller
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
+        $data = $request->validate([
+            'amount' => 'required|numeric|min:0.01'
+        ]);
+
         $payment = Payment::findOrFail($id);
         if ($payment->status !== 'pending') {
             return response()->json(['message' => 'Payment not pending'], 422);
         }
 
-        try {
-            $this->paymentService->executePayment($payment);
-            return response()->json(['message' => 'Payment executed/confirmed', 'payment' => $payment->fresh()]);
-        } catch (\Exception $e) {
-            return response()->json(['message' => 'Error executing payment', 'error' => $e->getMessage()], 500);
-        }
+        $payment->update([
+            'amount' => $data['amount'],
+            'platform_fee' => 0,
+            'points_share' => 0,
+            'system_share' => 0,
+            'net_amount' => $data['amount'],
+            'status' => 'completed',
+        ]);
+
+        return response()->json(['message' => 'Payment confirmed by admin', 'payment' => $payment->fresh()]);
     }
 
     /**
