@@ -18,6 +18,10 @@ class CaseModel extends Model
         'goal_amount',
         'collected_amount',
         'status',
+        'image_path',
+        'user_phone',
+        'user_name',
+        'location',
     ];
 
     public function organization()

@@ -23,14 +23,14 @@ class OrganizationRegistrationController extends Controller
             // حقول المستخدم المسؤول عن المنظمة
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'email', 'max:255', 'unique:'.User::class],
-            'phone' => ['required', 'string', 'max:20'],
+            'phone' => ['nullable', 'string', 'max:20'],
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
 
             // حقول المنظمة
             'organization_name' => ['required', 'string', 'max:255', 'unique:'.Organization::class.',name'],
-            'organization_description' => ['required', 'string'],
-            'organization_email' => ['required', 'string', 'email', 'max:255', 'unique:'.Organization::class.',email'],
-            'organization_phone' => ['required', 'string', 'max:20'],
+            'organization_description' => ['nullable', 'string'],
+            'organization_email' => ['nullable', 'string', 'email', 'max:255'],
+            'organization_phone' => ['nullable', 'string', 'max:20'],
             'organization_website' => ['nullable', 'string', 'url'],
         ]);
 
@@ -49,9 +49,9 @@ class OrganizationRegistrationController extends Controller
             'user_id' => $user->id,
             'name' => $request->organization_name,
             'slug' => Str::slug($request->organization_name),
-            'description' => $request->organization_description,
-            'email' => $request->organization_email,
-            'phone' => $request->organization_phone,
+            'description' => $request->organization_description ?? '—',
+            'email' => $request->organization_email ?? $request->email,
+            'phone' => $request->organization_phone ?? ($request->phone ?: ''),
             'website' => $request->organization_website,
             'status' => 'pending', // الحالة "قيد المراجعة" حتى موافقة الأدمن
         ]);

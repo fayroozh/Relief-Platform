@@ -26,6 +26,8 @@ Route::get('/ping', function () {
 // body: { name, email, password, password_confirmation, phone? }
 // response: { message, user_id }
 Route::post('/register', [RegisteredUserController::class, 'store']);
+// تسجيل شركة + منظمة بحالة pending
+Route::post('/register/company', [OrganizationRegistrationController::class, 'store']);
 
 // ✅ التحقق من OTP بعد التسجيل (غير محمي)
 // body: { email, otp_code }
@@ -73,12 +75,14 @@ Route::middleware('auth:sanctum')->group(function () {
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\DonationController;
 
-// مشاريع (محمي بالتوكن) — index/store/show/update/destroy
+// عرض المشاريع للعامة
+Route::get('/projects', [ProjectController::class, 'index']);
+Route::get('/projects/{project}', [ProjectController::class, 'show']);
+
+// مشاريع (محمي بالتوكن) — إنشاء/تحديث/حذف
 Route::middleware('auth:sanctum')->group(function () {
     // ✅ مشاريع
-    Route::get('/projects', [ProjectController::class, 'index']);
     Route::post('/projects', [ProjectController::class, 'store']);
-    Route::get('/projects/{project}', [ProjectController::class, 'show']);
     Route::put('/projects/{project}', [ProjectController::class, 'update']);
     Route::delete('/projects/{project}', [ProjectController::class, 'destroy']);
 
@@ -103,6 +107,7 @@ Route::middleware('auth:sanctum')->group(function () {
 use App\Http\Controllers\CaseController;
 
 Route::get('/cases', [CaseController::class, 'index']);
+Route::get('/cases/{id}', [CaseController::class, 'show']);
 Route::post('/cases', [CaseController::class, 'store']);
 
 // تغيير حالة الحالة (محمي بالتوكن)
@@ -142,6 +147,7 @@ use App\Http\Controllers\PaymentController;
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('payments/donate', [PaymentController::class, 'donate']);
     Route::get('wallet/balance', [PaymentController::class, 'walletBalance']);
+    Route::get('payments', [PaymentController::class, 'index']);
 });
 
 // تأكيد دفع يدوي للأدمن (محمي بالتوكن + يتحقق داخل الكنترولر)

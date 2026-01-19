@@ -5,7 +5,10 @@ namespace App\Http\Controllers;
 use App\Models\PendingDonation;
 use App\Models\Donation;
 use App\Models\CaseModel;
+use App\Models\Project;
 use Illuminate\Http\Request;
+use App\Helpers\Notify;
+use App\Models\User;
 
 class PendingDonationController extends Controller
 {
@@ -15,17 +18,26 @@ class PendingDonationController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'case_id' => 'required|exists:cases,id',
+            'case_id' => 'nullable|exists:cases,id',
+            'project_id' => 'nullable|exists:projects,id',
             'amount' => 'required|numeric|min:1',
+            'method' => 'required|string|max:50',
+            'payer_name' => 'required|string|max:255',
+            'phone' => 'required|string|max:50',
             'note' => 'nullable|string|max:2000',
         ]);
 
         $user = $request->user();
 
-        // 🔥 منع التبرع لنفس الحالة أكثر من 3 مرات
-        $count = PendingDonation::where('user_id', $user->id)
-            ->where('case_id', $request->case_id)
-            ->count();
+        // 🔥 منع التبرع لنفس الكيان أكثر من 3 مرات (حالة أو مشروع)
+        $countQuery = PendingDonation::where('user_id', $user->id);
+        if ($request->filled('case_id')) {
+            $countQuery->where('case_id', $request->case_id);
+        }
+        if ($request->filled('project_id')) {
+            $countQuery->where('project_id', $request->project_id);
+        }
+        $count = $countQuery->count();
 
         if ($count >= 3) {
             return response()->json([
@@ -37,10 +49,29 @@ class PendingDonationController extends Controller
         $pending = PendingDonation::create([
             'user_id' => $user->id,
             'case_id' => $request->case_id,
+            'project_id' => $request->project_id,
             'amount' => $request->amount,
+            'payer_name' => $request->payer_name,
+            'phone' => $request->phone,
             'note' => $request->note,
             'status' => 'pending'
         ]);
+
+        $admins = User::where('user_type', 'admin')->pluck('id');
+        foreach ($admins as $adminId) {
+            Notify::send(
+                $adminId,
+                'تبرع معلّق جديد',
+                "طلب تبرع جديد بقيمة {$pending->amount}",
+                'donations'
+            );
+        }
+        Notify::send(
+            $user->id,
+            'تم استلام طلب التبرع',
+            "تم استلام طلبك بقيمة {$pending->amount} وهو قيد المراجعة",
+            'donations'
+        );
 
         return response()->json([
             'message' => 'تم إرسال طلب التبرع بنجاح، بانتظار تأكيد الإدارة',
@@ -68,14 +99,18 @@ class PendingDonationController extends Controller
     // ================================
     // 3) قائمة الانتظار (Admin)
     // ================================
-    public function adminIndex()
+    public function adminIndex(Request $request)
     {
-        $pending = PendingDonation::with(['case', 'user'])
-            ->where('status', 'pending')
-            ->orderBy('created_at', 'asc')
-            ->get();
+        $status = $request->query('status', 'pending'); // pending | approved | rejected | all
 
-        return response()->json($pending);
+        $query = PendingDonation::with(['case', 'user', 'project'])
+            ->orderBy('created_at', 'asc');
+
+        if ($status !== 'all') {
+            $query->where('status', $status);
+        }
+
+        return response()->json($query->get());
     }
 
 
@@ -94,33 +129,76 @@ class PendingDonationController extends Controller
             return response()->json(['message' => 'تمت معالجة هذا التبرع مسبقاً'], 400);
         }
 
-        $case = CaseModel::findOrFail($pending->case_id);
+        $donation = null;
+        $case = null;
+        $project = null;
 
-        // إنشاء تبرع رسمي
-        $donation = Donation::create([
-            'user_id' => $pending->user_id,
-            'case_id' => $pending->case_id,
-            'amount' => $request->confirmed_amount,
-            'method' => 'sham-cash',
-            'note' => $pending->note,
-            'status' => 'completed'
-        ]);
+        if ($pending->case_id) {
+            $case = CaseModel::findOrFail($pending->case_id);
+            $donation = Donation::create([
+                'user_id' => $pending->user_id,
+                'case_id' => $pending->case_id,
+                'amount' => $request->confirmed_amount,
+                'method' => 'shamcash',
+                'note' => $pending->note,
+                'status' => 'completed'
+            ]);
+            $case->collected_amount += $request->confirmed_amount;
+            if ($case->collected_amount >= $case->goal_amount) {
+                $case->status = 'completed';
+            }
+            $case->save();
+        } elseif ($pending->project_id) {
+            $project = Project::findOrFail($pending->project_id);
+            
+            // إنشاء سجل تبرع للمشروع أيضاً
+            $donation = Donation::create([
+                'user_id' => $pending->user_id,
+                'project_id' => $pending->project_id,
+                'amount' => $request->confirmed_amount,
+                'method' => 'shamcash',
+                'note' => $pending->note,
+                'status' => 'completed'
+            ]);
 
-        // تحديث الحالة
-        $case->collected_amount += $request->confirmed_amount;
-        if ($case->collected_amount >= $case->goal_amount) {
-            $case->status = 'completed';
+            $project->raised_amount = ($project->raised_amount ?? 0) + $request->confirmed_amount;
+            if ($project->raised_amount >= $project->goal_amount) {
+                $project->status = 'completed';
+            }
+            $project->save();
         }
-        $case->save();
 
         // تحديث التبرع المعلق
         $pending->status = 'approved';
-        $pending->admin_confirmed_amount = $request->confirmed_amount;
         $pending->save();
+
+        Notify::send(
+            $pending->user_id,
+            'تم تأكيد التبرع',
+            "تم تأكيد تبرعك بقيمة {$request->confirmed_amount}$",
+            'donations'
+        );
+        if ($case && $case->organization) {
+            Notify::send(
+                $case->organization->user_id,
+                'تبرع جديد مؤكد',
+                "تم تأكيد تبرع بقيمة {$request->confirmed_amount}$ للحالة {$case->title}",
+                'donations'
+            );
+        }
+        if ($project) {
+            Notify::send(
+                $project->created_by_id,
+                'تبرع جديد مؤكد',
+                "تم تأكيد تبرع بقيمة {$request->confirmed_amount}$ للمشروع {$project->title}",
+                'donations'
+            );
+        }
 
         return response()->json([
             'message' => 'تم تأكيد التبرع وإضافته بنجاح',
-            'donation' => $donation
+            'donation' => $donation,
+            'project' => $project
         ]);
     }
 
@@ -138,6 +216,14 @@ class PendingDonationController extends Controller
 
         $pending->status = 'rejected';
         $pending->save();
+
+        $targetText = $pending->case_id ? "للحالة {$pending->case_id}" : ($pending->project_id ? "للمشروع {$pending->project_id}" : '');
+        Notify::send(
+            $pending->user_id,
+            'تم رفض طلب التبرع',
+            "تم رفض طلب تبرعك {$targetText}",
+            'donations'
+        );
 
         return response()->json(['message' => 'تم رفض التبرع']);
     }

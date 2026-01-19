@@ -56,6 +56,19 @@ class StatisticsController extends Controller
                 ->sum('amount'),
         ];
 
+        // سلاسل يومية (آخر 30 يوم للتبرعات، آخر 7 أيام للمستخدمين)
+        $donationsDaily = Donation::select(DB::raw('DATE(created_at) as day'), DB::raw('SUM(amount) as total'), DB::raw('COUNT(*) as count'))
+            ->where('created_at', '>=', now()->subDays(30))
+            ->groupBy('day')
+            ->orderBy('day')
+            ->get();
+
+        $usersDaily = User::select(DB::raw('DATE(created_at) as day'), DB::raw('COUNT(*) as count'))
+            ->where('created_at', '>=', now()->subDays(7))
+            ->groupBy('day')
+            ->orderBy('day')
+            ->get();
+
         // عدد الرسائل
         $messageStats = [
             'total' => Message::count(),
@@ -76,6 +89,10 @@ class StatisticsController extends Controller
             'donations' => $donationStats,
             'messages' => $messageStats,
             'recent' => $recent,
+            'series' => [
+                'donations_daily' => $donationsDaily,
+                'users_daily' => $usersDaily,
+            ],
         ]);
     }
 }

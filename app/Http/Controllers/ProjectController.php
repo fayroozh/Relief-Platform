@@ -12,6 +12,7 @@ class ProjectController extends Controller
     public function index(Request $request)
     {
         $query = Project::query();
+        $user = $request->user();
 
         if ($status = $request->query('status')) {
             $query->where('status', $status);
@@ -19,6 +20,10 @@ class ProjectController extends Controller
 
         if ($type = $request->query('type')) {
             $query->where('created_by_type', $type);
+        }
+
+        if (!$user || $user->user_type !== 'admin') {
+            $query->where('status', 'approved');
         }
 
         $projects = $query->orderBy('created_at', 'desc')->get();
@@ -29,12 +34,36 @@ class ProjectController extends Controller
     // ✅ إنشاء مشروع جديد (من أدمن أو جمعية)
     public function store(Request $request)
     {
-        $request->validate([
+        // معالجة حقول JSON القادمة من FormData (تأتي كسلسلة نصية أحياناً)
+        if ($request->has('suggested_amounts') && is_string($request->input('suggested_amounts'))) {
+            $request->merge(['suggested_amounts' => json_decode($request->input('suggested_amounts'), true)]);
+        }
+        if ($request->has('payment_channels') && is_string($request->input('payment_channels'))) {
+            $request->merge(['payment_channels' => json_decode($request->input('payment_channels'), true)]);
+        }
+        // تحويل القيم المنطقية من نصوص ("true"/"false") إلى boolean
+        if ($request->has('allow_custom_amount')) {
+            $request->merge(['allow_custom_amount' => filter_var($request->allow_custom_amount, FILTER_VALIDATE_BOOLEAN)]);
+        }
+        if ($request->has('enable_repetition')) {
+            $request->merge(['enable_repetition' => filter_var($request->enable_repetition, FILTER_VALIDATE_BOOLEAN)]);
+        }
+
+        $validatedData = $request->validate([
             'title' => 'required|string|max:255',
             'description' => 'nullable|string',
             'goal_amount' => 'required|numeric|min:0',
             'deadline' => 'nullable|date',
             'image' => 'nullable|image|mimes:jpg,jpeg,png|max:4096',
+            'manager_name' => 'nullable|string|max:255',
+            'category' => 'nullable|string|max:255',
+            'location' => 'nullable|string|max:255',
+            'suggested_amounts' => 'nullable|array',
+            'payment_channels' => 'nullable|array',
+            'thank_you_message' => 'nullable|string',
+            'allow_custom_amount' => 'boolean',
+            'enable_repetition' => 'boolean',
+            'repetition_type' => 'nullable|string|in:weekly,monthly',
         ]);
 
         $user = $request->user();
@@ -43,20 +72,17 @@ class ProjectController extends Controller
         $createdByType = $user->user_type === 'admin' ? 'admin' : 'organization';
         $status = $user->user_type === 'admin' ? 'approved' : 'pending';
 
-        $data = [
-            'title' => $request->title,
-            'description' => $request->description,
-            'goal_amount' => $request->goal_amount,
-            'deadline' => $request->deadline,
-            'created_by_id' => $user->id,
-            'created_by_type' => $createdByType,
-            'status' => $status,
-        ];
+        $data = $validatedData;
+        $data['created_by_id'] = $user->id;
+        $data['created_by_type'] = $createdByType;
+        $data['status'] = $status;
 
         // رفع صورة المشروع إن وُجدت
         if ($request->hasFile('image')) {
             $data['image_path'] = $request->file('image')->store('projects', 'public');
         }
+        // إزالة 'image' من المصفوفة لأننا خزنا المسار في 'image_path'
+        unset($data['image']);
 
         $project = Project::create($data);
 
@@ -84,13 +110,36 @@ class ProjectController extends Controller
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        $request->validate([
+        // معالجة حقول JSON القادمة من FormData
+        if ($request->has('suggested_amounts') && is_string($request->input('suggested_amounts'))) {
+            $request->merge(['suggested_amounts' => json_decode($request->input('suggested_amounts'), true)]);
+        }
+        if ($request->has('payment_channels') && is_string($request->input('payment_channels'))) {
+            $request->merge(['payment_channels' => json_decode($request->input('payment_channels'), true)]);
+        }
+        if ($request->has('allow_custom_amount')) {
+            $request->merge(['allow_custom_amount' => filter_var($request->allow_custom_amount, FILTER_VALIDATE_BOOLEAN)]);
+        }
+        if ($request->has('enable_repetition')) {
+            $request->merge(['enable_repetition' => filter_var($request->enable_repetition, FILTER_VALIDATE_BOOLEAN)]);
+        }
+
+        $validatedData = $request->validate([
             'title' => 'sometimes|string|max:255',
             'description' => 'nullable|string',
             'goal_amount' => 'sometimes|numeric|min:0',
             'deadline' => 'nullable|date',
             'status' => 'in:pending,approved,rejected,completed',
             'image' => 'nullable|image|mimes:jpg,jpeg,png|max:4096',
+            'manager_name' => 'nullable|string|max:255',
+            'category' => 'nullable|string|max:255',
+            'location' => 'nullable|string|max:255',
+            'suggested_amounts' => 'nullable|array',
+            'payment_channels' => 'nullable|array',
+            'thank_you_message' => 'nullable|string',
+            'allow_custom_amount' => 'boolean',
+            'enable_repetition' => 'boolean',
+            'repetition_type' => 'nullable|string|in:weekly,monthly',
         ]);
 
         // إذا تم رفع صورة جديدة نحذف القديمة
@@ -98,10 +147,11 @@ class ProjectController extends Controller
             if ($project->image_path) {
                 Storage::disk('public')->delete($project->image_path);
             }
-            $project->image_path = $request->file('image')->store('projects', 'public');
+            $validatedData['image_path'] = $request->file('image')->store('projects', 'public');
         }
+        unset($validatedData['image']);
 
-        $project->fill($request->only(['title', 'description', 'goal_amount', 'deadline', 'status']));
+        $project->fill($validatedData);
         $project->save();
 
         return response()->json([

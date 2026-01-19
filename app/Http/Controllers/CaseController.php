@@ -25,25 +25,42 @@ class CaseController extends Controller
         return response()->json($query->paginate($perPage));
     }
 
+    // GET /api/cases/{id}
+    public function show($id)
+    {
+        $case = CaseModel::with(['organization', 'category'])->findOrFail($id);
+        return response()->json($case);
+    }
+
     // POST /api/cases
     public function store(Request $request)
     {
         $request->validate([
-            'organization_id' => 'required|exists:organizations,id',
+            'organization_id' => 'nullable|exists:organizations,id',
             'title' => 'required|string|max:255',
             'description' => 'required|string',
             'category_id' => 'required|exists:categories,id',
             'goal_amount' => 'required|numeric|min:1',
+            'file' => 'nullable|file|max:10240', // 10MB max
         ]);
 
+        $filePath = null;
+        if ($request->hasFile('file')) {
+            $filePath = $request->file('file')->store('cases_documents', 'public');
+        }
+
         $case = CaseModel::create([
-            'organization_id' => $request->organization_id,
+            'organization_id' => $request->organization_id ?? null,
             'title' => $request->title,
             'description' => $request->description,
             'category_id' => $request->category_id,
             'goal_amount' => $request->goal_amount,
             'collected_amount' => 0,
             'status' => 'pending',
+            'image_path' => $filePath,
+            'user_name' => $request->user_name,
+            'user_phone' => $request->user_phone,
+            'location' => $request->location,
         ]);
 
         return response()->json([
@@ -64,19 +81,23 @@ class CaseController extends Controller
 
 
         if ($request->status === 'approved') {
-            Notify::send(
-                $case->organization->user_id,
-                'تمت الموافقة على الحالة ✅',
-                "تمت الموافقة على الحالة: {$case->title}",
-                'case'
-            );
+            if ($case->organization) {
+                Notify::send(
+                    $case->organization->user_id,
+                    'تمت الموافقة على الحالة ✅',
+                    "تمت الموافقة على الحالة: {$case->title}",
+                    'case'
+                );
+            }
         } elseif ($request->status === 'rejected') {
-            Notify::send(
-                $case->organization->user_id,
-                'تم رفض الحالة ❌',
-                "تم رفض الحالة: {$case->title}",
-                'case'
-            );
+            if ($case->organization) {
+                Notify::send(
+                    $case->organization->user_id,
+                    'تم رفض الحالة ❌',
+                    "تم رفض الحالة: {$case->title}",
+                    'case'
+                );
+            }
         }
         return response()->json([
             'message' => 'Case status updated',

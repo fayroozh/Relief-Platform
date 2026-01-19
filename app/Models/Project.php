@@ -18,6 +18,27 @@ class Project extends Model
         'created_by_id',
         'created_by_type',
         'status',
+        'image_path',
+        'manager_name',
+        'category',
+        'location',
+        'suggested_amounts',
+        'payment_channels',
+        'thank_you_message',
+        'allow_custom_amount',
+        'enable_repetition',
+        'repetition_type',
+        'admin_notes',
+    ];
+
+    protected $casts = [
+        'suggested_amounts' => 'array',
+        'payment_channels' => 'array',
+        'allow_custom_amount' => 'boolean',
+        'enable_repetition' => 'boolean',
+        'goal_amount' => 'decimal:2',
+        'raised_amount' => 'decimal:2',
+        'deadline' => 'date',
     ];
 
     // علاقة مع الجمعية

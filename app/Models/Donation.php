@@ -11,6 +11,7 @@ class Donation extends Model
 
     protected $fillable = [
         'case_id',
+        'project_id',
         'user_id',
         'amount',
         'method',
@@ -23,6 +24,12 @@ class Donation extends Model
     public function case()
     {
         return $this->belongsTo(CaseModel::class, 'case_id');
+    }
+
+    // علاقة مع المشروع
+    public function project()
+    {
+        return $this->belongsTo(Project::class, 'project_id');
     }
 
     // علاقة مع المتبرع (المستخدم)

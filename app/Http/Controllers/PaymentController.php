@@ -102,4 +102,32 @@ class PaymentController extends Controller
         $wallet = Wallet::firstOrCreate(['user_id' => $user->id], ['name' => $user->name . ' wallet']);
         return response()->json(['balance' => (float) $wallet->balance]);
     }
+
+    /**
+     * List payments (donations) with optional filters.
+     * GET /api/payments?project_id=&case_id=&status=&per_page=
+     * - Admin sees all; regular users see their own payments only.
+     */
+    public function index(Request $request)
+    {
+        $user = Auth::user();
+        $query = Payment::with(['user:id,name']);
+
+        if (!$user || $user->user_type !== 'admin') {
+            $query->where('user_id', $user->id);
+        }
+
+        if ($projectId = $request->query('project_id')) {
+            $query->where('project_id', $projectId);
+        }
+        if ($caseId = $request->query('case_id')) {
+            $query->where('case_id', $caseId);
+        }
+        if ($status = $request->query('status')) {
+            $query->where('status', $status);
+        }
+
+        $perPage = (int) $request->query('per_page', 20);
+        return response()->json($query->orderBy('created_at', 'desc')->paginate($perPage));
+    }
 }

@@ -23,6 +23,7 @@ class User extends Authenticatable
         'reset_token',
         'reset_expires_at',
         'profile_image',
+        'photo_path',
         'cover_image',
         'bio',
     ];
